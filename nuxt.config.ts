@@ -11,8 +11,10 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      supabaseUrl: process.env.VITE_SUPABASE_URL,
-      supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY
+      supabaseUrl: 'https://almrmxelkpgyhqxwfuol.supabase.co',
+      supabaseAnonKey: 'sb_publishable_knYsB5CdSoPjxhN9Ag7jcw_L9FZrvOe'
+      //supabaseUrl: process.env.VITE_SUPABASE_URL,
+      //supabaseAnonKey: process.env.VITE_SUPABASE_ANON_KEY
     }
   }
 })
