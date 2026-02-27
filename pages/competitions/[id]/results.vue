@@ -110,6 +110,18 @@ const loadResults = async () => {
   participantResults.value = allParticipants.sort((a, b) => b.score - a.score)
 }
 
+const topTeam = computed(() => {
+  return teamResults.value.length > 0 ? teamResults.value[0] : null
+})
+
+const topParticipant = computed(() => {
+  return participantResults.value.length > 0 ? participantResults.value[0] : null
+})
+
+const totalPoints = computed(() => {
+  return teamResults.value.reduce((sum, team) => sum + team.totalScore, 0)
+})
+
 onMounted(() => {
   loadCompetition()
   loadResults()
@@ -131,10 +143,110 @@ onMounted(() => {
     </div>
 
     <div v-if="competition" class="mb-6">
-      <h1 class="text-3xl font-bold text-gray-900">Résultats - {{ competition.name }}</h1>
+      <h1 class="text-3xl font-bold text-gray-900">Dashboard - {{ competition.name }}</h1>
       <p class="mt-2 text-sm text-gray-600">
         {{ new Date(competition.date).toLocaleDateString('fr-FR') }}
       </p>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-8">
+      <!-- Meilleure Équipe -->
+      <div class="bg-white overflow-hidden shadow rounded-lg border-t-4 border-yellow-400">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">
+                  Meilleure Équipe
+                </dt>
+                <dd>
+                  <div class="text-lg font-medium text-gray-900">
+                    {{ topTeam ? topTeam.name : '-' }}
+                  </div>
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 px-5 py-3">
+          <div class="text-sm">
+            <span class="font-medium text-gray-900">{{ topTeam ? topTeam.totalScore : 0 }}</span>
+            <span class="text-gray-500"> points</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Meilleur Participant -->
+      <div class="bg-white overflow-hidden shadow rounded-lg border-t-4 border-blue-500">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-6 w-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">
+                  Meilleur Participant
+                </dt>
+                <dd>
+                  <div class="text-lg font-medium text-gray-900 truncate" :title="topParticipant ? `${topParticipant.firstName} ${topParticipant.lastName}` : ''">
+                    {{ topParticipant ? `${topParticipant.firstName} ${topParticipant.lastName}` : '-' }}
+                  </div>
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 px-5 py-3">
+          <div class="text-sm flex justify-between">
+             <div>
+               <span class="font-medium text-gray-900">{{ topParticipant ? topParticipant.score : 0 }}</span>
+               <span class="text-gray-500"> points</span>
+             </div>
+             <div class="text-gray-500 truncate max-w-[120px]" :title="topParticipant?.teamName">
+               {{ topParticipant ? topParticipant.teamName : '' }}
+             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Total Points -->
+      <div class="bg-white overflow-hidden shadow rounded-lg border-t-4 border-green-500">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <svg class="h-6 w-6 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">
+                  Points Marqués
+                </dt>
+                <dd>
+                  <div class="text-lg font-medium text-gray-900">
+                    {{ totalPoints }} <span class="text-sm text-gray-500 font-normal">au total</span>
+                  </div>
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 px-5 py-3">
+          <div class="text-sm text-gray-500">
+            Sur toutes les équipes
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="mb-6">

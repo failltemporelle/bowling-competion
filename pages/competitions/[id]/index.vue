@@ -224,13 +224,23 @@ onMounted(() => {
       </p>
     </div>
 
-    <div class="mb-6">
+    <div class="mb-6 flex space-x-4">
       <button
         @click="showTeamForm = !showTeamForm"
         class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
       >
         {{ showTeamForm ? 'Annuler' : 'Nouvelle Équipe' }}
       </button>
+
+      <NuxtLink
+        :to="`/competitions/${competitionId}/results`"
+        class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+      >
+        <svg class="h-4 w-4 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+        Voir le Dashboard
+      </NuxtLink>
     </div>
 
     <div v-if="showTeamForm" class="bg-white shadow rounded-lg p-6 mb-6">
