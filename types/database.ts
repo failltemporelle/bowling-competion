@@ -23,9 +23,18 @@ export interface Participant {
   created_at: string
 }
 
+export interface Session {
+  id: string
+  competition_id: string
+  name: string
+  session_number: number
+  created_at: string
+}
+
 export interface Score {
   id: string
   participant_id: string
+  session_id: string
   score: number
   created_at: string
 }

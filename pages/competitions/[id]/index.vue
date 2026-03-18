@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import type { Competition, Team, Participant, Score } from '~/types/database'
+import type { Competition, Team, Participant, Score, Session } from '~/types/database'
 
 const route = useRoute()
 const { $supabase } = useNuxtApp()
 const competitionId = route.params.id as string
 
 const competition = ref<Competition | null>(null)
-const teams = ref<(Team & { participants: (Participant & { scores: Score | null })[] })[]>([])
+const teams = ref<(Team & { participants: (Participant & { scores: Score[] })[] })[]>([])
+const sessions = ref<Session[]>([])
 const showTeamForm = ref(false)
 const showParticipantForm = ref<string | null>(null)
 
@@ -36,6 +37,18 @@ const loadCompetition = async () => {
   competition.value = data
 }
 
+const loadSessions = async () => {
+  const { data, error } = await $supabase
+    .from('sessions')
+    .select('*')
+    .eq('competition_id', competitionId)
+    .order('session_number')
+
+  if (!error) {
+    sessions.value = data || []
+  }
+}
+
 const loadTeams = async () => {
   const { data: teamsData, error: teamsError } = await $supabase
     .from('teams')
@@ -61,21 +74,20 @@ const loadTeams = async () => {
         return { ...team, participants: [] }
       }
 
-      const participantsWithScores = await Promise.all(
-        (participantsData || []).map(async (participant) => {
-          const { data: scoreData, error: scoreError } = await $supabase
-            .from('scores')
-            .select('*')
-            .eq('participant_id', participant.id)
-            .maybeSingle()
+        const participantsWithScores = await Promise.all(
+          (participantsData || []).map(async (participant) => {
+            const { data: scoreData, error: scoreError } = await $supabase
+              .from('scores')
+              .select('*')
+              .eq('participant_id', participant.id)
 
-          if (scoreError) {
-            console.error('Error loading score:', scoreError)
-          }
+            if (scoreError) {
+              console.error('Error loading scores:', scoreError)
+            }
 
-          return { ...participant, scores: scoreData }
-        })
-      )
+            return { ...participant, scores: scoreData || [] }
+          })
+        )
 
       return { ...team, participants: participantsWithScores }
     })
@@ -135,17 +147,6 @@ const createParticipant = async (teamId: string) => {
     return
   }
 
-  const { error: scoreError } = await $supabase
-    .from('scores')
-    .insert([{
-      participant_id: participantData.id,
-      score: 0
-    }])
-
-  if (scoreError) {
-    console.error('Error creating score:', scoreError)
-  }
-
   newParticipant.value = { first_name: '', last_name: '', nickname: '' }
   showParticipantForm.value = null
   await loadTeams()
@@ -169,12 +170,17 @@ const deleteParticipant = async (participantId: string) => {
   await loadTeams()
 }
 
-const updateScore = async (participant: Participant & { scores: Score | null }, newScore: number) => {
-  if (participant.scores) {
+const getScoreValue = (scores: Score[], sessionId: string) => {
+  const score = scores?.find(s => s.session_id === sessionId)
+  return score ? score.score : 0
+}
+
+const updateScore = async (scoreId: string | undefined, participantId: string, sessionId: string, newScore: number) => {
+  if (scoreId) {
     const { error } = await $supabase
       .from('scores')
       .update({ score: newScore })
-      .eq('id', participant.scores.id)
+      .eq('id', scoreId)
 
     if (error) {
       console.error('Error updating score:', error)
@@ -184,7 +190,8 @@ const updateScore = async (participant: Participant & { scores: Score | null }, 
     const { error } = await $supabase
       .from('scores')
       .insert([{
-        participant_id: participant.id,
+        participant_id: participantId,
+        session_id: sessionId,
         score: newScore
       }])
 
@@ -197,8 +204,30 @@ const updateScore = async (participant: Participant & { scores: Score | null }, 
   await loadTeams()
 }
 
+const addSession = async () => {
+  const nextSessionNumber = sessions.value.length > 0
+    ? Math.max(...sessions.value.map(s => s.session_number)) + 1
+    : 1
+    
+  const { error } = await $supabase
+    .from('sessions')
+    .insert([{
+      competition_id: competitionId,
+      name: `Session ${nextSessionNumber}`,
+      session_number: nextSessionNumber
+    }]);
+    
+  if (error) {
+    console.error('Error adding session:', error);
+    return;
+  }
+  
+  await loadSessions();
+}
+
 onMounted(() => {
   loadCompetition()
+  loadSessions()
   loadTeams()
 })
 </script>
@@ -230,6 +259,13 @@ onMounted(() => {
         class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
       >
         {{ showTeamForm ? 'Annuler' : 'Nouvelle Équipe' }}
+      </button>
+
+      <button
+        @click="addSession"
+        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors"
+      >
+        + Ajouter une Session
       </button>
 
       <NuxtLink
@@ -318,12 +354,14 @@ onMounted(() => {
         <div class="px-6 py-4">
           <div class="flex justify-between items-center mb-4">
             <h4 class="text-sm font-medium text-gray-900">Participants</h4>
-            <button
-              @click="showParticipantForm = showParticipantForm === team.id ? null : team.id"
-              class="text-sm text-blue-600 hover:text-blue-800 transition-colors"
-            >
-              {{ showParticipantForm === team.id ? 'Annuler' : '+ Ajouter un participant' }}
-            </button>
+            <div class="flex items-center space-x-3">
+              <button
+                @click="showParticipantForm = showParticipantForm === team.id ? null : team.id"
+                class="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                {{ showParticipantForm === team.id ? 'Annuler' : '+ Ajouter un participant' }}
+              </button>
+            </div>
           </div>
 
           <div v-if="showParticipantForm === team.id" class="bg-gray-50 rounded-lg p-4 mb-4">
@@ -394,16 +432,18 @@ onMounted(() => {
                 </p>
               </div>
               <div class="flex items-center space-x-3">
-                <div class="flex items-center space-x-2">
-                  <label class="text-xs text-gray-600">Score:</label>
-                  <input
-                    :value="participant.scores?.score || 0"
-                    @change="updateScore(participant, Number(($event.target as HTMLInputElement).value))"
-                    type="number"
-                    min="0"
-                    :max="competition?.max_score"
-                    class="w-20 border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
+                <div class="flex flex-wrap gap-2">
+                  <div v-for="session in sessions" :key="session.id" class="flex items-center space-x-1">
+                    <label class="text-xs text-gray-500 font-medium w-5 text-right" :title="session.name">S{{ session.session_number }}</label>
+                    <input
+                      :value="getScoreValue(participant.scores, session.id)"
+                      @change="updateScore(participant.scores?.find(s => s.session_id === session.id)?.id, participant.id, session.id, Number(($event.target as HTMLInputElement).value))"
+                      type="number"
+                      min="0"
+                      :max="competition?.max_score"
+                      class="w-16 border border-gray-300 rounded-md shadow-sm py-1 px-1.5 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
                 </div>
                 <button
                   @click="deleteParticipant(participant.id)"
