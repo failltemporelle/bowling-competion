@@ -7,13 +7,25 @@ const competitionId = route.params.id as string
 
 const competition = ref<Competition | null>(null)
 const sessions = ref<Session[]>([])
-const selectedSessionId = ref<string | null>(null)
 const viewMode = ref<'teams' | 'participants'>('teams')
+
+const sortKey = ref<string>('total')
+const sortOrder = ref<'desc' | 'asc'>('desc')
+
+const toggleSort = (key: string) => {
+  if (sortKey.value === key) {
+    sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    sortKey.value = key
+    sortOrder.value = 'desc'
+  }
+}
 
 interface TeamResult {
   id: string
   name: string
   location: string
+  sessionScores: Record<string, number>
   totalScore: number
   participantCount: number
   averageScore: number
@@ -26,7 +38,8 @@ interface ParticipantResult {
   nickname: string
   teamName: string
   teamLocation: string
-  score: number
+  sessionScores: Record<string, number>
+  totalScore: number
 }
 
 // Stores all raw data
@@ -55,9 +68,6 @@ const loadSessions = async () => {
 
   if (!error && data) {
     sessions.value = data
-    if (data.length > 0 && !selectedSessionId.value) {
-      selectedSessionId.value = data[0].id
-    }
   }
 }
 
@@ -89,20 +99,20 @@ const loadAllData = async () => {
 }
 
 const filteredTeamResults = computed<TeamResult[]>(() => {
-  if (!selectedSessionId.value) return []
-
   const results: TeamResult[] = []
   
   for (const team of rawTeams.value) {
     const teamParticipants = rawParticipants.value.filter(p => p.team_id === team.id)
     let teamTotalScore = 0
     let validScoresCount = 0
+    const sessionScores: Record<string, number> = {}
 
     for (const participant of teamParticipants) {
-      const score = rawScores.value.find(s => s.participant_id === participant.id && s.session_id === selectedSessionId.value)
-      if (score) {
+      const participantScores = rawScores.value.filter(s => s.participant_id === participant.id)
+      for (const score of participantScores) {
         teamTotalScore += score.score
         validScoresCount++
+        sessionScores[score.session_id] = (sessionScores[score.session_id] || 0) + score.score
       }
     }
 
@@ -111,6 +121,7 @@ const filteredTeamResults = computed<TeamResult[]>(() => {
         id: team.id,
         name: team.name,
         location: team.location,
+        sessionScores,
         totalScore: teamTotalScore,
         participantCount: teamParticipants.length,
         averageScore: validScoresCount > 0 ? Math.round(teamTotalScore / validScoresCount) : 0
@@ -118,17 +129,27 @@ const filteredTeamResults = computed<TeamResult[]>(() => {
     }
   }
 
-  return results.sort((a, b) => b.totalScore - a.totalScore)
+  return results.sort((a, b) => {
+    const valA = sortKey.value === 'total' ? a.totalScore : (a.sessionScores[sortKey.value] || 0)
+    const valB = sortKey.value === 'total' ? b.totalScore : (b.sessionScores[sortKey.value] || 0)
+    return sortOrder.value === 'desc' ? valB - valA : valA - valB
+  })
 })
 
 const filteredParticipantResults = computed<ParticipantResult[]>(() => {
-  if (!selectedSessionId.value) return []
-
   const results: ParticipantResult[] = []
 
   for (const participant of rawParticipants.value) {
-    const score = rawScores.value.find(s => s.participant_id === participant.id && s.session_id === selectedSessionId.value)
-    if (score) {
+    const participantScores = rawScores.value.filter(s => s.participant_id === participant.id)
+    if (participantScores.length > 0) {
+      let totalScore = 0
+      const sessionScores: Record<string, number> = {}
+      
+      for (const score of participantScores) {
+        totalScore += score.score
+        sessionScores[score.session_id] = score.score
+      }
+
       const team = rawTeams.value.find(t => t.id === participant.team_id)
       results.push({
         id: participant.id,
@@ -137,12 +158,17 @@ const filteredParticipantResults = computed<ParticipantResult[]>(() => {
         nickname: participant.nickname,
         teamName: team?.name || 'Inconnue',
         teamLocation: team?.location || '',
-        score: score.score
+        sessionScores,
+        totalScore
       })
     }
   }
 
-  return results.sort((a, b) => b.score - a.score)
+  return results.sort((a, b) => {
+    const valA = sortKey.value === 'total' ? a.totalScore : (a.sessionScores[sortKey.value] || 0)
+    const valB = sortKey.value === 'total' ? b.totalScore : (b.sessionScores[sortKey.value] || 0)
+    return sortOrder.value === 'desc' ? valB - valA : valA - valB
+  })
 })
 
 const topTeam = computed(() => {
@@ -186,17 +212,9 @@ onMounted(async () => {
         </p>
       </div>
 
-      <!-- Select Session Dropdown -->
+      <!-- Placeholder for spacing -->
       <div v-if="sessions.length > 0" class="flex flex-col">
-        <label class="text-sm font-medium text-gray-700 mb-1">Sélectionner une Session</label>
-        <select
-          v-model="selectedSessionId"
-          class="block w-48 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
-        >
-          <option v-for="session in sessions" :key="session.id" :value="session.id">
-            {{ session.name }}
-          </option>
-        </select>
+        <!-- Dashboard now dynamically handles all sessions -->
       </div>
     </div>
 
@@ -206,10 +224,6 @@ onMounted(async () => {
       </svg>
       <h3 class="mt-2 text-sm font-medium text-gray-900">Aucune session</h3>
       <p class="mt-1 text-sm text-gray-500">Allez dans la page de gestion pour ajouter une session.</p>
-    </div>
-
-    <div v-else-if="!selectedSessionId" class="text-center py-12 bg-white rounded-lg shadow">
-      <p class="text-gray-500">Veuillez sélectionner une session.</p>
     </div>
 
     <div v-else>
@@ -241,7 +255,7 @@ onMounted(async () => {
             {{ topParticipant ? `${topParticipant.firstName} ${topParticipant.lastName}` : '-' }}
           </div>
           <div class="stat-desc font-medium truncate" :title="topParticipant?.teamName">
-            {{ topParticipant ? `${topParticipant.score} pts - ${topParticipant.teamName}` : '0 points' }}
+            {{ topParticipant ? `${topParticipant.totalScore} pts - ${topParticipant.teamName}` : '0 points' }}
           </div>
         </div>
 
@@ -252,7 +266,7 @@ onMounted(async () => {
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
             </svg>
           </div>
-          <div class="stat-title">Points Globaux (Session)</div>
+          <div class="stat-title">Points Globaux (Toutes Sessions)</div>
           <div class="stat-value text-xl lg:text-3xl text-success">{{ totalPoints }}</div>
           <div class="stat-desc font-medium">Sur toutes les équipes</div>
         </div>
@@ -297,7 +311,17 @@ onMounted(async () => {
                 <th>Équipe</th>
                 <th>Localisation</th>
                 <th class="text-right">Participants</th>
-                <th class="text-right">Score de session</th>
+                <th v-for="session in sessions" :key="session.id" 
+                    class="text-right cursor-pointer hover:bg-base-300 transition-colors" 
+                    @click="toggleSort(session.id)">
+                  S{{ session.session_number }}
+                  <span v-if="sortKey === session.id">{{ sortOrder === 'desc' ? '↓' : '↑' }}</span>
+                </th>
+                <th class="text-right font-bold text-primary cursor-pointer hover:bg-base-300 transition-colors" 
+                    @click="toggleSort('total')">
+                  Total
+                  <span v-if="sortKey === 'total'">{{ sortOrder === 'desc' ? '↓' : '↑' }}</span>
+                </th>
                 <th class="text-right">Moyenne / joueur</th>
               </tr>
             </thead>
@@ -330,7 +354,10 @@ onMounted(async () => {
                 <td class="font-medium text-base">{{ team.name }}</td>
                 <td class="opacity-80">{{ team.location }}</td>
                 <td class="text-right">{{ team.participantCount }}</td>
-                <td class="text-right font-bold text-lg">{{ team.totalScore }}</td>
+                <td v-for="session in sessions" :key="session.id" class="text-right opacity-80">
+                  {{ team.sessionScores[session.id] || 0 }}
+                </td>
+                <td class="text-right font-bold text-lg text-primary">{{ team.totalScore }}</td>
                 <td class="text-right opacity-80">{{ team.averageScore }}</td>
               </tr>
             </tbody>
@@ -357,7 +384,17 @@ onMounted(async () => {
                 <th>Participant</th>
                 <th>Surnom</th>
                 <th>Équipe</th>
-                <th class="text-right">Score</th>
+                <th v-for="session in sessions" :key="session.id" 
+                    class="text-right cursor-pointer hover:bg-base-300 transition-colors" 
+                    @click="toggleSort(session.id)">
+                  S{{ session.session_number }}
+                  <span v-if="sortKey === session.id">{{ sortOrder === 'desc' ? '↓' : '↑' }}</span>
+                </th>
+                <th class="text-right font-bold text-primary cursor-pointer hover:bg-base-300 transition-colors" 
+                    @click="toggleSort('total')">
+                  Total
+                  <span v-if="sortKey === 'total'">{{ sortOrder === 'desc' ? '↓' : '↑' }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -394,7 +431,10 @@ onMounted(async () => {
                   <div class="font-medium">{{ participant.teamName }}</div>
                   <div class="text-xs opacity-70">{{ participant.teamLocation }}</div>
                 </td>
-                <td class="text-right font-bold text-lg">{{ participant.score }}</td>
+                <td v-for="session in sessions" :key="session.id" class="text-right opacity-80">
+                  {{ participant.sessionScores[session.id] || 0 }}
+                </td>
+                <td class="text-right font-bold text-lg text-primary">{{ participant.totalScore }}</td>
               </tr>
             </tbody>
           </table>
